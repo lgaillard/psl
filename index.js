@@ -13,12 +13,16 @@ var internals = {};
 //
 internals.rules = require('./data/rules.json').map(function (rule) {
 
-  return {
+  var ruleDefinition = {
     rule: rule,
     suffix: rule.replace(/^(\*\.|\!)/, ''),
     wildcard: rule.charAt(0) === '*',
     exception: rule.charAt(0) === '!'
   };
+
+  ruleDefinition.punySuffix = Punycode.toASCII(ruleDefinition.suffix);
+
+  return ruleDefinition;
 });
 
 
@@ -38,9 +42,7 @@ internals.findRule = function (domain) {
 
   var punyDomain = Punycode.toASCII(domain);
   return internals.rules.reduce(function (memo, rule) {
-
-    var punySuffix = Punycode.toASCII(rule.suffix);
-    if (!internals.endsWith(punyDomain, '.' + punySuffix) && punyDomain !== punySuffix) {
+    if (!internals.endsWith(punyDomain, '.' + rule.punySuffix) && punyDomain !== rule.punySuffix) {
       return memo;
     }
     // This has been commented out as it never seems to run. This is because
