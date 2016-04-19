@@ -4,6 +4,28 @@ module.exports=["ac","com.ac","edu.ac","gov.ac","net.ac","mil.ac","org.ac","ad",
 /*eslint no-var:0, prefer-arrow-callback: 0 */
 'use strict';
 
+if (!Array.prototype.find) {
+  Array.prototype.find = function (predicate) {
+    if (this === null) {
+      throw new TypeError('Array.prototype.find called on null or undefined');
+    }
+    if (typeof predicate !== 'function') {
+      throw new TypeError('predicate must be a function');
+    }
+    var list = Object(this);
+    var length = list.length >>> 0;
+    var thisArg = arguments[1];
+    var value;
+
+    for (var i = 0; i < length; i++) {
+      value = list[i];
+      if (predicate.call(thisArg, value, i, list)) {
+        return value;
+      }
+    }
+    return undefined;
+  };
+}
 
 var Punycode = require('punycode');
 
@@ -27,7 +49,7 @@ internals.rules = require('./data/rules.json').map(function (rule) {
 
   return ruleDefinition;
 });
-
+internals.rules.reverse();
 
 //
 // Check is given string ends with `suffix`.
@@ -44,21 +66,9 @@ internals.endsWith = function (str, suffix) {
 internals.findRule = function (domain) {
 
   var punyDomain = Punycode.toASCII(domain);
-  return internals.rules.reduce(function (memo, rule) {
-    if (!internals.endsWith(punyDomain, '.' + rule.punySuffix) && punyDomain !== rule.punySuffix) {
-      return memo;
-    }
-    // This has been commented out as it never seems to run. This is because
-    // sub tlds always appear after their parents and we never find a shorter
-    // match.
-    //if (memo) {
-    //  var memoSuffix = Punycode.toASCII(memo.suffix);
-    //  if (memoSuffix.length >= punySuffix.length) {
-    //    return memo;
-    //  }
-    //}
-    return rule;
-  }, null);
+  return internals.rules.find(function (rule) {
+    return punyDomain === rule.punySuffix || internals.endsWith(punyDomain, '.' + rule.punySuffix);
+  }) || null;
 };
 
 
