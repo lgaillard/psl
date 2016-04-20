@@ -4,28 +4,6 @@ module.exports=["ac","com.ac","edu.ac","gov.ac","net.ac","mil.ac","org.ac","ad",
 /*eslint no-var:0, prefer-arrow-callback: 0 */
 'use strict';
 
-if (!Array.prototype.find) {
-  Array.prototype.find = function (predicate) {
-    if (this === null) {
-      throw new TypeError('Array.prototype.find called on null or undefined');
-    }
-    if (typeof predicate !== 'function') {
-      throw new TypeError('predicate must be a function');
-    }
-    var list = Object(this);
-    var length = list.length >>> 0;
-    var thisArg = arguments[1];
-    var value;
-
-    for (var i = 0; i < length; i++) {
-      value = list[i];
-      if (predicate.call(thisArg, value, i, list)) {
-        return value;
-      }
-    }
-    return undefined;
-  };
-}
 
 var Punycode = require('punycode');
 
@@ -36,20 +14,53 @@ var internals = {};
 //
 // Read rules from file.
 //
-internals.rules = require('./data/rules.json').map(function (rule) {
+internals.rules = (function () {
 
-  var ruleDefinition = {
-    rule: rule,
-    suffix: rule.replace(/^(\*\.|\!)/, ''),
-    wildcard: rule.charAt(0) === '*',
-    exception: rule.charAt(0) === '!'
-  };
+  var rules = require('./data/rules.json').map(function (rule) {
 
-  ruleDefinition.punySuffix = Punycode.toASCII(ruleDefinition.suffix);
+    var ruleDefinition = {
+      rule: rule,
+      suffix: rule.replace(/^(\*\.|\!)/, ''),
+      wildcard: rule.charAt(0) === '*',
+      exception: rule.charAt(0) === '!'
+    };
 
-  return ruleDefinition;
-});
-internals.rules.reverse();
+    ruleDefinition.punySuffix = Punycode.toASCII(ruleDefinition.suffix);
+
+    return ruleDefinition;
+  });
+
+  return rules.reduce(function (data, rule) {
+
+    var suffix = rule.punySuffix;
+
+    var parts = suffix.split('.').reverse();
+
+    var parentNode = parts.slice(0, -1).reduce(function (node, next) {
+
+      var nextNode = node[next];
+      if (!nextNode) {
+        nextNode = node[next] = {
+          childs: {}
+        };
+      }
+      if (nextNode) {
+        return nextNode.childs;
+      }
+      return node;
+    }, data.childs);
+
+    parentNode[parts[parts.length - 1]] = {
+      childs: {},
+      data: rule
+    };
+
+    return data;
+  }, { childs: {} });
+
+})();
+
+
 
 //
 // Check is given string ends with `suffix`.
@@ -66,9 +77,24 @@ internals.endsWith = function (str, suffix) {
 internals.findRule = function (domain) {
 
   var punyDomain = Punycode.toASCII(domain);
-  return internals.rules.find(function (rule) {
-    return punyDomain === rule.punySuffix || internals.endsWith(punyDomain, '.' + rule.punySuffix);
-  }) || null;
+
+  var parts = punyDomain.split('.');
+
+  var node = internals.rules;
+  for (var i = parts.length - 1; i >= 0; --i) {
+    var part = parts[i];
+    if (!node.childs[part]) {
+      break;
+    }
+    node = node.childs[part];
+  }
+
+  var rule = node.data;
+  if (!rule) {
+    return null;
+  }
+
+  return (punyDomain === rule.punySuffix || internals.endsWith(punyDomain, '.' + rule.punySuffix)) ? rule : null;
 };
 
 
